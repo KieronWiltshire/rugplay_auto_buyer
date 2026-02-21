@@ -1,0 +1,21 @@
+{
+  "name": "api-caller",
+  "version": "1.0.0",
+  "description": "Script that calls an external API (run via cron/systemd)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "call": "npm run build && npm run start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1"
+  }
+}
