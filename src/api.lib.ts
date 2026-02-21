@@ -1,11 +1,6 @@
-
-import Humanoid from "humanoid-js";
-
 type HttpVerb = "GET" | "OPTIONS" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 const BASE_URL = (process.env.BASE_URL ?? "https://rugplay.com").replace(/\/+$/, "");
-
-let humanoid = new Humanoid(true);
 
 export function buildHeaders(): HeadersInit {
   const cfClearance = process.env.CF_CLEARANCE ?? "";
@@ -13,7 +8,7 @@ export function buildHeaders(): HeadersInit {
   const userAgent = process.env.USER_AGENT ?? "Mozilla/5.0 (Windows NT 10.0; rv:131.0) Gecko/20100101 Firefox/131.0";
 
   const cookieParts: string[] = [];
-  // if (cfClearance) cookieParts.push(`cf_clearance=${cfClearance}`);
+  if (cfClearance) cookieParts.push(`cf_clearance=${cfClearance}`);
   if (sessionToken) cookieParts.push(`__Secure-better-auth.session_token=${sessionToken}`);
   const cookie = cookieParts.join("; ");
 
@@ -40,29 +35,29 @@ export type ApiOptions =
 async function api(options: ApiOptions): Promise<string> {
   const { endpoint, method } = options;
   const payload = "payload" in options ? options.payload : undefined;
+
+  const body =
+    (method !== "GET" && method !== "OPTIONS" && payload !== undefined)
+      ? JSON.stringify(payload)
+      : undefined;
+
   const fullUrl = `${BASE_URL}${endpoint}`;
-
-  const headers = buildHeaders() as Record<string, string>;
-  const dataType = method !== "GET" && method !== "OPTIONS" ? "json" : "form";
-
   console.log(`Calling... ${method} ${fullUrl}`);
-  
-  const response: any = await humanoid.sendRequest(
-    fullUrl,
+
+  const response = await fetch(fullUrl, {
     method,
-    payload as object | undefined,
-    headers,
-    dataType,
-  );
-
-  const result = typeof response.body === "string" ? response.body : JSON.stringify(response.body);
-
-  console.log('Result:', {
-    isSessionChallenged: response.isSessionChallenged,
-    isChallengeSolved: response.isChallengeSolved,
-    response: response.body,
+    headers: buildHeaders(),
+    ...(body !== undefined ? { body } : {}),
   });
 
+  const result = await response.text();
+
+  console.log('Result:', result);
+
+  if (!response.ok) {
+    throw new Error(`API responded with ${response.status}: ${result}`);
+  }
+  
   return result;
 }
 
