@@ -7,6 +7,8 @@ async function main(): Promise<void> {
     const symbol = process.env.BUY_SYMBOL ?? "";
     const amount = Number(process.env.BUY_AMOUNT ?? "0");
 
+    console.log(`Buying ${amount} of ${symbol}...`);
+
     await buy(symbol, amount);
   } catch (error) {
     console.error(error);
