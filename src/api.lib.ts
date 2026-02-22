@@ -50,13 +50,15 @@ async function api(options: ApiOptions): Promise<string> {
     ...(body !== undefined ? { body } : {}),
   });
 
-  const result = await response.json();
+  let result: any;
 
-  console.log('Result:', result);
-
-  if (!response.ok) {
-    throw new Error(`API responded with ${response.status}: ${result}`);
+  try {
+    result = await response.json();
+  } catch (error) {
+    result = await response.text();
   }
+
+  console.log("Result:", result);
 
   return result;
 }
@@ -85,5 +87,14 @@ export async function claimRewards(): Promise<any> {
     endpoint: url,
     method: "POST",
     payload: { type: "CLAIM" },
+  });
+}
+
+export async function comment(symbol: string, comment: string): Promise<any> {
+  const url = `/coin/${symbol}/comments`;
+  return api({
+    endpoint: url,
+    method: "POST",
+    payload: { content: comment },
   });
 }
