@@ -52,13 +52,11 @@ async function api(options: ApiOptions): Promise<string> {
 
   let result: any;
 
-  try {
+  if (response.headers.get("content-type") === "application/json") {
     result = await response.json();
-  } catch (error) {
+  } else {
     result = await response.text();
   }
-
-  console.log("Result:", result);
 
   return result;
 }
@@ -96,5 +94,13 @@ export async function comment(symbol: string, comment: string): Promise<any> {
     endpoint: url,
     method: "POST",
     payload: { content: comment },
+  });
+}
+
+export function getCoinInfo(symbol: string): Promise<any> {
+  const url = `/coin/${symbol}/holders`;
+  return api({
+    endpoint: url,
+    method: "GET",
   });
 }
