@@ -14,7 +14,7 @@ export function buildHeaders(): HeadersInit {
 
   return {
     "User-Agent": userAgent,
-    "Accept": "application/json",
+    "Accept": "/",
     "Referer": "https://rugplay.com/",
     "Content-Type": "application/json",
     "Origin": "https://rugplay.com/",
@@ -50,15 +50,23 @@ async function api(options: ApiOptions): Promise<string> {
     ...(body !== undefined ? { body } : {}),
   });
 
-  const result = await response.text();
+  const result = await response.json();
 
   console.log('Result:', result);
 
   if (!response.ok) {
     throw new Error(`API responded with ${response.status}: ${result}`);
   }
-  
+
   return result;
+}
+
+export async function summary(): Promise<any> {
+  const url = `/portfolio/summary`;
+  return api({
+    endpoint: url,
+    method: "GET"
+  });
 }
 
 /** Buy a coin: POST coin/{symbol}/trade with type BUY and amount. Returns ok and response text. */
@@ -72,7 +80,7 @@ export async function buy(symbol: string, buyAmount: number): Promise<any> {
 }
 
 export async function claimRewards(): Promise<any> {
-  const url = `/reward/claim`;
+  const url = `/rewards/claim`;
   return api({
     endpoint: url,
     method: "POST",
