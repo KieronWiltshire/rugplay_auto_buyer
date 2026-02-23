@@ -123,4 +123,13 @@ async function runEveryHour(): Promise<void> {
   setTimeout(runEveryHour, delayMs);
 }
 
-runEveryHour();
+const runScheduled = process.argv.includes("--every-hour") || process.argv.includes("--schedule");
+
+if (runScheduled) {
+  runEveryHour();
+} else {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
