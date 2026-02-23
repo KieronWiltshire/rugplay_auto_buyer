@@ -104,3 +104,12 @@ export function getCoinInfo(symbol: string): Promise<any> {
     method: "GET",
   });
 }
+
+export function coinFlip(side: "heads" | "tails", amount: number): Promise<any> {
+  const url = `/arcade/coinflip`;
+  return api({
+    endpoint: url,
+    method: "POST",
+    payload: { side, amount },
+  });
+}

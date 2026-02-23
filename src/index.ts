@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { summary, buy, claimRewards, comment, getCoinInfo } from "./api.lib.js";
+import { summary, buy, claimRewards, comment, getCoinInfo, coinFlip } from "./api.lib.js";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * ONE_HOUR_MS;
@@ -21,8 +21,7 @@ function randomDelayUntilNextHour(): number {
   return Math.max(60_000, delayMs); // at least 1 minute
 }
 
-async function main(): Promise<void> {
-  const symbol = process.env.BUY_SYMBOL ?? "";
+async function main(gamble: boolean = false): Promise<void> {
   let baseCurrencyBalance = 0;
 
   try {
@@ -34,6 +33,43 @@ async function main(): Promise<void> {
     console.error(error);
   }
 
+  if (gamble) {
+    await processGamble(baseCurrencyBalance);
+  } else {
+    await processBuy(baseCurrencyBalance);
+  }
+}
+
+async function processGamble(baseCurrencyBalance: number) {
+  const startAmount = 250;
+  const stopLoss = startAmount * (2 ** 9);
+  let betSize = startAmount;
+  let lossStreak = 0;
+
+  console.log(startAmount, stopLoss);
+
+  const flip = async function () {
+    const result = await coinFlip("heads", betSize);
+    console.log("New Balance:", `$${result.newBalance.toFixed(2)}`);
+    if (result.won) {
+      betSize = startAmount;
+      lossStreak = 0;
+    } else {
+      lossStreak++;
+      if (lossStreak > 1) {
+        betSize *= 2;
+      }
+    }
+    if (betSize < stopLoss) {
+      setTimeout(flip, 1500);
+    }
+  }
+
+  flip();
+}
+
+async function processBuy(baseCurrencyBalance: number) {
+  const symbol = process.env.BUY_SYMBOL ?? "";
   let timeRemainingMs = 12 * ONE_HOUR_MS; // fallback: 12 hours
   try {
     console.log(`Claiming rewards...`);
@@ -48,7 +84,7 @@ async function main(): Promise<void> {
   console.log(`Time remaining: ${timeRemainingMs}ms until rewards are claimed. Equivalent to ${timeRemainingMs / ONE_HOUR_MS} hours.`);
 
   const hoursLeft = Math.max(timeRemainingMs / ONE_HOUR_MS, 1);
-  const amount = Math.min(1875, hoursLeft > 0 ? Math.floor(baseCurrencyBalance / hoursLeft) : 0);
+  const amount = Math.min(Math.max(1875, Number(process.env.MAX_BUY_AMOUNT ?? 0)), hoursLeft > 0 ? Math.floor(baseCurrencyBalance / hoursLeft) : 0);
 
   try {
     console.log(`Buying ${amount} of ${symbol}... (Dividing by ${hoursLeft} hours)`);
@@ -116,7 +152,7 @@ async function main(): Promise<void> {
 }
 
 async function runEveryHour(): Promise<void> {
-  await main();
+  await main(false);
   const delayMs = randomDelayUntilNextHour();
   const mins = Math.round(delayMs / 60_000);
   console.log(`Next run in ${mins} minutes (random time next hour).`);
@@ -124,11 +160,13 @@ async function runEveryHour(): Promise<void> {
 }
 
 const runScheduled = process.argv.includes("--every-hour") || process.argv.includes("--schedule");
+const gamble = process.argv.includes("--gamble");
 
-if (runScheduled) {
+
+if (runScheduled && !gamble) {
   runEveryHour();
 } else {
-  main().catch((err) => {
+  main(gamble).catch((err) => {
     console.error(err);
     process.exit(1);
   });
