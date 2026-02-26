@@ -1,5 +1,7 @@
 import "dotenv/config";
-import { summary, buy, claimRewards, comment, getCoinInfo, coinFlip } from "./api.lib.js";
+import { summary, buy, claimRewards, comment, getCoinInfo, coinFlip, transfer } from "./api.lib.js";
+import * as fs from "fs";
+import * as path from "path";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * ONE_HOUR_MS;
@@ -20,7 +22,7 @@ function randomDelayUntilNextHour(): number {
   return Math.max(60_000, delayMs); // at least 1 minute
 }
 
-async function main(gamble: boolean = false): Promise<void> {
+async function main(gamble: boolean = false, buy: boolean = true): Promise<void> {
   let baseCurrencyBalance = 0;
 
   try {
@@ -35,84 +37,107 @@ async function main(gamble: boolean = false): Promise<void> {
   if (gamble) {
     await processGamble(baseCurrencyBalance);
   } else {
-    await processBuy(baseCurrencyBalance);
+    if (buy) {
+      await processBuy(baseCurrencyBalance);
+    } else {
+      await processRewards();
+    }
   }
 }
 
 async function processGamble(baseCurrencyBalance: number) { 
-  const maxMartingale = 10; 
+  const maxMartingale = 9; 
   let currentBaseBalance = baseCurrencyBalance;
   
-  let startAmount = Math.min(1800, Math.max(currentBaseBalance / (2 ** maxMartingale), 10)); 
+  let startAmount = Math.min(1800, Math.max((currentBaseBalance / (2 ** maxMartingale)) / 2, 10)); 
   let stopLoss = startAmount * (2 ** maxMartingale); 
   let betSize = startAmount; 
   let lossStreak = 0;
   let winStreak = 0;
+  let borrowedAmount = 20_000;
+  let hasBeenPaid = false;
 
   console.log("Starting Balance:", `$${currentBaseBalance.toFixed(2)}`); 
   console.log("Starting Stop Loss:", `$${stopLoss.toFixed(2)}`); 
   console.log("Starting Bet:", `$${startAmount}`); 
   
   const flip = async function () {
-    console.log("Bet Size:", `$${betSize.toFixed(2)}`); 
-    const result = await coinFlip("heads", betSize); 
-    console.log("New Balance:", `$${result.newBalance.toFixed(2)}`); 
+    let wasPaid = false;
+    try {
+      console.log("Bet Size:", `$${betSize.toFixed(2)}`);
+      const result = await coinFlip("heads", betSize); 
+      console.log("New Balance:", `$${result.newBalance.toFixed(2)}`); 
 
-    if (result.won) { 
-      if (result.payout * 2 > startAmount * (2 ** 3)) {
-        betSize = startAmount;
-      } else {
-        if (winStreak > 1) {
-          betSize = result.payout * 2;
-        } else {
-          betSize = startAmount;
+      if (result.won) {
+        if (!hasBeenPaid && result.newBalance > borrowedAmount * 2.5) {
+          await transfer("maze", borrowedAmount);
+          hasBeenPaid = true;
+          wasPaid = true;
+          fs.writeFileSync(path.join(__dirname, "hasBeenPaid.txt"), "true");
         }
-      }
-      lossStreak = 0; 
-      winStreak++;
-    } else { 
-      winStreak = 0;
-      lossStreak++; 
-      if (lossStreak > 1) { 
-        betSize *= 2; 
+        if (result.payout * 2 > startAmount * (2 ** 3)) {
+          betSize = startAmount;
+        } else {
+          if (winStreak > 2) {
+            betSize = result.payout * 4;
+          } else {
+            betSize = startAmount;
+          }
+        }
+        lossStreak = 0; 
+        winStreak++;
+      } else { 
+        winStreak = 0;
+        lossStreak++; 
+        if (lossStreak > 1) { 
+          betSize *= 2; 
+        } 
       } 
-    } 
 
-    if (result.newBalance > currentBaseBalance + (Math.max(1875, Number(process.env.MAX_BUY_AMOUNT ?? 0)) * 2)) { 
-      const buyResult = await processBuy(result.newBalance, false); 
-      currentBaseBalance = buyResult.newBalance;
-      startAmount = Math.min(1800, Math.max(currentBaseBalance / (2 ** maxMartingale), 10)); 
-      stopLoss = startAmount * (2 ** maxMartingale); 
-      betSize = startAmount; 
-      lossStreak = 0;
-    } 
-    
-    if (betSize <= stopLoss && betSize <= result.newBalance) { 
-      setTimeout(flip, 1500); 
-    } else { 
-      startAmount = Math.min(1800, Math.max(currentBaseBalance / (2 ** maxMartingale), 10));
-      stopLoss = startAmount * (2 ** maxMartingale); 
-      betSize = startAmount; 
-      lossStreak = 0; 
-      setTimeout(flip, 1500); 
-    } 
+      if (result.newBalance > currentBaseBalance + (Math.max(1875, Number(process.env.MAX_BUY_AMOUNT ?? 0)) * 2)) { 
+        const buyResult = await processBuy(result.newBalance, false); 
+        currentBaseBalance = wasPaid ? buyResult.newBalance - borrowedAmount : buyResult.newBalance;
+        startAmount = Math.min(1800, Math.max((currentBaseBalance / (2 ** maxMartingale)) / 2, 10)); 
+        stopLoss = startAmount * (2 ** maxMartingale); 
+        betSize = startAmount; 
+        lossStreak = 0;
+      } 
+      
+      if (betSize <= stopLoss && betSize <= result.newBalance) {
+        setTimeout(flip, 1500); 
+      } else {
+        startAmount = Math.min(1800, Math.max((currentBaseBalance / (2 ** maxMartingale)) / 2, 10)); 
+        stopLoss = startAmount * (2 ** maxMartingale); 
+        betSize = startAmount; 
+        lossStreak = 0; 
+        setTimeout(flip, 1500); 
+      }
+    } catch (error) {
+      console.log('Server error, possibly a 502. Retrying in 5 seconds...');
+      setTimeout(flip, 5000);
+    }
   } 
     
   flip(); 
 }
 
-async function processBuy(baseCurrencyBalance: number, provideComment: boolean = true) {
-  const symbol = process.env.BUY_SYMBOL ?? "";
-  let timeRemainingMs = 12 * ONE_HOUR_MS; // fallback: 12 hours
+async function processRewards() {
   try {
     console.log(`Claiming rewards...`);
     const rewards = await claimRewards();
     if (rewards?.timeRemaining != null) {
-      timeRemainingMs = Number(rewards.timeRemaining);
+      return Number(rewards.timeRemaining);
     }
   } catch (error) {
     console.error(error);
   }
+
+  return 12 * ONE_HOUR_MS;
+}
+
+async function processBuy(baseCurrencyBalance: number, provideComment: boolean = true) {
+  const symbol = process.env.BUY_SYMBOL ?? "";
+  let timeRemainingMs = await processRewards();
 
   console.log(`Time remaining: ${timeRemainingMs}ms until rewards are claimed. Equivalent to ${timeRemainingMs / ONE_HOUR_MS} hours.`);
 
@@ -196,12 +221,13 @@ async function runEveryHour(): Promise<void> {
 
 const runScheduled = process.argv.includes("--every-hour") || process.argv.includes("--schedule");
 const gamble = process.argv.includes("--gamble");
+const claim = process.argv.includes("--claim");
 
 
 if (runScheduled && !gamble) {
   runEveryHour();
 } else {
-  main(gamble).catch((err) => {
+  main(gamble, !claim).catch((err) => {
     console.error(err);
     process.exit(1);
   });

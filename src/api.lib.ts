@@ -113,3 +113,12 @@ export function coinFlip(side: "heads" | "tails", amount: number): Promise<any> 
     payload: { side, amount },
   });
 }
+
+export function transfer(user: string, amount: number): Promise<any> {
+  const url = `/transfer`;
+  return api({
+    endpoint: url,
+    method: "POST",
+    payload: { recipientUsername: user, amount, type: "CASH" },
+  });
+}
