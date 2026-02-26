@@ -221,13 +221,13 @@ async function runEveryHour(): Promise<void> {
 
 const runScheduled = process.argv.includes("--every-hour") || process.argv.includes("--schedule");
 const gamble = process.argv.includes("--gamble");
-const claim = process.argv.includes("--claim");
+const buyEnabled = process.argv.includes("--enable-buy") || process.env.BUY_ENABLED === "true";
 
 
 if (runScheduled && !gamble) {
   runEveryHour();
 } else {
-  main(gamble, !claim).catch((err) => {
+  main(gamble, buyEnabled).catch((err) => {
     console.error(err);
     process.exit(1);
   });
