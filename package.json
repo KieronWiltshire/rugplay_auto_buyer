@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "call": "npm run build && npm run start",
-    "gamble": "npm run build && npm run start -- --gamble"
+    "gamble": "npm run build && npm run start -- --gamble",
+    "claim": "npm run build && npm run start -- --claim"
   },
   "keywords": [],
   "author": "",
